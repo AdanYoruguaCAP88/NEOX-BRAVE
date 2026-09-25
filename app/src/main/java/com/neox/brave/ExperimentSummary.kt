@@ -35,8 +35,10 @@ data class ExperimentSummary(
                 return MetricSummary(mean, median, variance)
             }
 
-            val distribution = CompanionAction.values().associateWith { action ->
-                results.sumOf { it.actionCounts[action] ?: 0 }
+            val distribution = CompanionAction.values().associate { action ->
+                action to results.sumOf { metrics ->
+                    metrics.actionCounts[action] ?: 0
+                }
             }
 
             return ExperimentSummary(
