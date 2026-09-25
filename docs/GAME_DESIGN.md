@@ -1,66 +1,42 @@
-# NEOX-BRAVE — Game Design v0.1
+# NEOX-BRAVE — Game Design v0.2
 
-## 1. Core fantasy
+## Core identity
 
-The player is an operator inside a hostile adaptive environment. Combat is immediate, but survival depends on reading the state of the system and configuring the correct autonomous companion.
+NEOX-BRAVE is an original action-platformer about operating an adaptive combat system under incomplete information.
 
-## 2. Core loop
+The player does not select a fixed "best" companion. The player configures a capability vector and the companion evaluates the live environment.
 
-1. Enter a sector.
-2. Observe threats and environmental signals.
-3. Break objects and expose cores.
-4. Collect three cores.
-5. Instantiate a companion profile.
-6. Fight while the companion adapts its priorities.
-7. Reach the sector exit.
-8. Reconfigure for the next state.
+## Core taxonomy
 
-## 3. Combination system
+Four original core types currently define capability biases:
 
-The prototype uses two core types:
+- A — Force: offensive pressure
+- B — Shield: defensive resilience
+- C — Control: battlefield manipulation
+- D — Mobility: positioning and range
 
-- A — offensive bias
-- B — defensive/control bias
+Three collected cores form an ordered signature such as ACD or BDD.
 
-Three collected cores form an ordered signature.
+The signature produces a capability vector rather than a single scripted weapon.
 
-The production system will expand this into a richer set of original core types and behavior vectors.
+## Adaptive rule
 
-## 4. Adaptive companion
+**Configuration determines capability. Context determines behavior.**
 
-A companion is not only a weapon. It has a behavior policy.
+The same signature may attack in one state, intercept in another, and reposition in a third.
 
-Its state is influenced by:
+## Prototype actions
 
-- player position
-- enemy density
-- projectile threats
-- player energy
-- distance from player
-- current objective
-- companion configuration
+- ATTACK
+- INTERCEPT
+- GUARD
+- REPOSITION
+- SUPPRESS
 
-The same companion can therefore produce different actions under different system states.
+## Design target
 
-## 5. Combat
+The game should reward observation and configuration rather than memorization of a single optimal build.
 
-Target feel:
+## IP boundary
 
-- fast movement
-- readable hitboxes
-- short attack commitment
-- projectile interception
-- destructible environmental objects
-- deliberate boss patterns
-
-## 6. Level structure
-
-Levels should be authored as compact tactical spaces rather than long corridors.
-
-Each sector introduces a decision problem that can be solved through more than one companion configuration.
-
-## 7. Originality boundary
-
-The project may reference the broad history of 8-bit action games in its design discussion, but all expressive elements of NEOX-BRAVE are original.
-
-No original game ROM data, sprites, music, dialogue, maps, character designs, logos, or extracted code are part of this repository.
+All characters, names, visual designs, audio, story, maps and code are original. The project does not include assets or extracted code from existing games.
