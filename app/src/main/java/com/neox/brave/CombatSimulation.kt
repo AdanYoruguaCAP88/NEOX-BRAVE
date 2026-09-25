@@ -95,7 +95,6 @@ class CombatSimulation(
             )
 
             val currentEnemyEnergy = world.enemies.sumOf { it.energy.toDouble() }.toFloat()
-            val defeatedBefore = metrics.enemiesDefeated
             metrics.enemiesDefeated = world.enemies.count { it.energy <= 0f }
 
             val energyDelta = previousEnergy - world.player.energy
@@ -165,8 +164,6 @@ class CombatSimulation(
 
         world.projectiles.removeAll { it.x < -100f || it.x > worldWidth + 100f }
 
-        // Controller removes intercepted projectiles before this frame's final state.
-        // The harness measures this at the call site in run().
         @Suppress("UNUSED_VARIABLE")
         val removedByWorldRules = before - world.projectiles.size
     }
