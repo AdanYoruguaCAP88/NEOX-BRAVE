@@ -2,22 +2,34 @@ package com.neox.brave
 
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.random.Random
 
-/**
- * Headless deterministic combat harness.
- *
- * No Android/UI dependencies: the same Observation -> AdaptiveCombat ->
- * CompanionController loop can be executed repeatedly for experiments.
- */
+enum class SimulationScenario {
+    OPEN_FIELD,
+    CLOSE_ASSAULT,
+    PROJECTILE_THREAT,
+    LOW_ENERGY,
+    CROWD_CONTROL
+}
+
 data class SimulationWorld(
-    val player: PlayerState = PlayerState(x = 180f, y = 0f),
-    val enemies: MutableList<EnemyState> = mutableListOf(
-        EnemyState(900f, 0f),
-        EnemyState(1180f, 0f)
-    ),
-    val projectiles: MutableList<Projectile> = mutableListOf(),
-    var time: Float = 0f
+    val player: PlayerState,
+    val enemies: MutableList<EnemyState>,
+    val projectiles: MutableList<Projectile>,
+    val width: Float = 1600f,
+    private val random: Random
 ) {
+    var time: Float = 0f
+        private set
+    var damageReceived: Float = 0f
+        private set
+    var damageDealt: Float = 0f
+        private set
+    var projectilesIntercepted: Int = 0
+        private set
+    var enemiesDefeated: Int = 0
+        private set
+
     fun observe(): Observation = Observation(
         playerX = player.x,
         playerEnergy = player.energy,
@@ -29,151 +41,188 @@ data class SimulationWorld(
             .minOfOrNull { abs(it.x - player.x) },
         enemyCount = enemies.count { it.energy > 0f }
     )
+
+    fun advance(dt: Float) {
+        time += dt
+
+        enemies.filter { it.energy > 0f }.forEach { enemy ->
+            enemy.projectileCooldown -= dt
+            if (enemy.projectileCooldown <= 0f) {
+                val direction = if (player.x < enemy.x) -1f else 1f
+                projectiles += Projectile(
+                    x = enemy.x,
+                    y = 0f,
+                    vx = direction * (220f + random.nextFloat() * 80f),
+                    hostile = true
+                )
+                enemy.projectileCooldown = 1.4f + random.nextFloat() * 0.8f
+            }
+        }
+
+        projectiles.forEach { it.x += it.vx * dt }
+
+        val hits = projectiles.filter { it.hostile && abs(it.x - player.x) <= 28f }
+        if (hits.isNotEmpty()) {
+            val damage = hits.size * 8f
+            player.energy = max(0f, player.energy - damage)
+            damageReceived += damage
+            projectiles.removeAll(hits)
+        }
+
+        projectiles.removeAll { it.x < -100f || it.x > width + 100f }
+    }
+
+    fun recordEnemyChanges(before: Map<EnemyState, Float>) {
+        before.forEach { (enemy, previous) ->
+            val delta = previous - enemy.energy
+            if (delta > 0f) {
+                damageDealt += delta
+                if (previous > 0f && enemy.energy <= 0f) {
+                    enemiesDefeated += 1
+                }
+            }
+        }
+    }
+
+    fun recordInterceptions(count: Int) {
+        projectilesIntercepted += count
+    }
 }
 
 data class CombatMetrics(
-    var damageReceived: Float = 0f,
-    var projectilesIntercepted: Int = 0,
-    var enemiesDefeated: Int = 0,
-    var survivalTime: Float = 0f,
-    var energyRemaining: Float = 0f,
-    var damageDealt: Float = 0f,
-    var actions: MutableMap<CompanionAction, Int> = CompanionAction.values()
-        .associateWith { 0 }
-        .toMutableMap()
+    val seed: Long,
+    val scenario: SimulationScenario,
+    val profileSignature: String,
+    val durationSeconds: Float,
+    val damageDealt: Float,
+    val damageReceived: Float,
+    val projectilesIntercepted: Int,
+    val enemiesDefeated: Int,
+    val survivalTimeSeconds: Float,
+    val remainingEnergy: Float,
+    val actionCounts: Map<CompanionAction, Int>
+) {
+    val totalActions: Int
+        get() = actionCounts.values.sum()
+
+    fun actionShare(action: CompanionAction): Float =
+        if (totalActions == 0) 0f else (actionCounts[action] ?: 0) / totalActions.toFloat()
 }
 
-data class SimulationResult(
-    val profile: CompanionProfile,
-    val metrics: CombatMetrics
-)
-
+/**
+ * Headless deterministic combat harness.
+ *
+ * The Android renderer is absent here. The decision path remains:
+ * Observation -> AdaptiveCombat -> CompanionController -> world mutation.
+ */
 class CombatSimulation(
-    private val groundY: Float = 500f,
-    private val worldWidth: Float = 1600f,
-    private val stepSeconds: Float = 1f / 30f
+    private val stepSeconds: Float = 1f / 30f,
+    private val maxDurationSeconds: Float = 30f
 ) {
     fun run(
         profile: CompanionProfile,
-        durationSeconds: Float = 60f,
-        seed: Int = 0
-    ): SimulationResult {
-        val world = SimulationWorld(
-            player = PlayerState(x = 180f, y = groundY - 72f),
-            enemies = seededEnemies(seed).toMutableList()
-        )
+        scenario: SimulationScenario,
+        seed: Long
+    ): CombatMetrics {
+        val world = createWorld(scenario, seed)
         val combat = AdaptiveCombat()
         val controller = CompanionController()
         controller.state.x = world.player.x + 72f
 
-        val metrics = CombatMetrics()
-        var previousEnergy = world.player.energy
+        val actions = CompanionAction.entries.associateWith { 0 }.toMutableMap()
+        var elapsed = 0f
 
-        val steps = (durationSeconds / stepSeconds).toInt()
-
-        for (step in 0 until steps) {
-            world.time += stepSeconds
-            updateEnemies(world, stepSeconds)
-            updateProjectiles(world, stepSeconds)
-
+        while (elapsed < maxDurationSeconds && world.player.energy > 0f) {
             val observation = world.observe()
             val action = combat.decide(profile, observation.toCombatContext())
-            metrics.actions[action] = (metrics.actions[action] ?: 0) + 1
+            actions[action] = (actions[action] ?: 0) + 1
 
-            val previousEnemyEnergy = world.enemies.sumOf { it.energy.toDouble() }.toFloat()
-            val previousProjectileCount = world.projectiles.count { it.hostile }
+            val beforeEnemies = world.enemies.associateWith { it.energy }
+            val beforeProjectiles = world.projectiles.size
 
             controller.update(
                 dt = stepSeconds,
-                groundY = groundY,
+                groundY = 0f,
                 player = world.player,
                 enemies = world.enemies,
                 projectiles = world.projectiles,
                 profile = profile,
                 action = action,
-                worldWidth = worldWidth
+                worldWidth = world.width
             )
 
-            val currentEnemyEnergy = world.enemies.sumOf { it.energy.toDouble() }.toFloat()
-            metrics.enemiesDefeated = world.enemies.count { it.energy <= 0f }
-
-            val energyDelta = previousEnergy - world.player.energy
-            if (energyDelta > 0f) metrics.damageReceived += energyDelta
-            previousEnergy = world.player.energy
-
-            val dealt = previousEnemyEnergy - currentEnemyEnergy
-            if (dealt > 0f) metrics.damageDealt += dealt
-
-            if (action == CompanionAction.INTERCEPT) {
-                val remainingProjectiles = world.projectiles.count { it.hostile }
-                metrics.projectilesIntercepted +=
-                    (previousProjectileCount - remainingProjectiles).coerceAtLeast(0)
-            }
-
-            if (world.player.energy <= 0f) break
-        }
-
-        metrics.survivalTime = world.time
-        metrics.energyRemaining = world.player.energy
-
-        return SimulationResult(profile, metrics)
-    }
-
-    private fun updateEnemies(world: SimulationWorld, dt: Float) {
-        world.enemies
-            .filter { it.energy > 0f }
-            .forEach { enemy ->
-                enemy.projectileCooldown -= dt
-                if (enemy.projectileCooldown <= 0f) {
-                    val direction = if (world.player.x < enemy.x) -1f else 1f
-                    world.projectiles += Projectile(
-                        x = enemy.x,
-                        y = groundY - 42f,
-                        vx = direction * 260f,
-                        hostile = true
-                    )
-                    enemy.projectileCooldown = 1.8f
-                }
-            }
-    }
-
-    private fun updateProjectiles(world: SimulationWorld, dt: Float) {
-        val before = world.projectiles.size
-        world.projectiles.forEach { it.x += it.vx * dt }
-
-        val playerLeft = world.player.x
-        val playerRight = world.player.x + 42f
-        val playerTop = world.player.y
-        val playerBottom = world.player.y + 72f
-
-        val hits = world.projectiles.filter {
-            it.hostile &&
-                it.x >= playerLeft &&
-                it.x <= playerRight &&
-                it.y >= playerTop &&
-                it.y <= playerBottom
-        }
-
-        if (hits.isNotEmpty()) {
-            world.player.energy = max(
-                0f,
-                world.player.energy - hits.size * 8f
+            world.recordInterceptions(
+                (beforeProjectiles - world.projectiles.size).coerceAtLeast(0)
             )
-            world.projectiles.removeAll(hits)
+            world.recordEnemyChanges(beforeEnemies)
+            world.advance(stepSeconds)
+            elapsed += stepSeconds
         }
 
-        world.projectiles.removeAll { it.x < -100f || it.x > worldWidth + 100f }
-
-        @Suppress("UNUSED_VARIABLE")
-        val removedByWorldRules = before - world.projectiles.size
+        return CombatMetrics(
+            seed = seed,
+            scenario = scenario,
+            profileSignature = profile.signature,
+            durationSeconds = elapsed,
+            damageDealt = world.damageDealt,
+            damageReceived = world.damageReceived,
+            projectilesIntercepted = world.projectilesIntercepted,
+            enemiesDefeated = world.enemiesDefeated,
+            survivalTimeSeconds = elapsed,
+            remainingEnergy = world.player.energy,
+            actionCounts = actions.toMap()
+        )
     }
 
-    private fun seededEnemies(seed: Int): List<EnemyState> {
-        val offset = ((seed % 5) + 5) % 5
-        return listOf(
-            EnemyState(900f + offset * 24f, 0f),
-            EnemyState(1180f - offset * 18f, 0f),
-            EnemyState(1420f + offset * 12f, 0f)
+    private fun createWorld(
+        scenario: SimulationScenario,
+        seed: Long
+    ): SimulationWorld {
+        val random = Random(seed)
+        val playerEnergy: Float
+        val enemyPositions: List<Float>
+        val projectilePositions: List<Float>
+
+        when (scenario) {
+            SimulationScenario.OPEN_FIELD -> {
+                playerEnergy = 100f
+                enemyPositions = listOf(760f)
+                projectilePositions = emptyList()
+            }
+            SimulationScenario.CLOSE_ASSAULT -> {
+                playerEnergy = 100f
+                enemyPositions = listOf(260f, 340f)
+                projectilePositions = emptyList()
+            }
+            SimulationScenario.PROJECTILE_THREAT -> {
+                playerEnergy = 100f
+                enemyPositions = listOf(900f)
+                projectilePositions = listOf(390f)
+            }
+            SimulationScenario.LOW_ENERGY -> {
+                playerEnergy = 22f
+                enemyPositions = listOf(500f, 760f)
+                projectilePositions = emptyList()
+            }
+            SimulationScenario.CROWD_CONTROL -> {
+                playerEnergy = 100f
+                enemyPositions = listOf(420f, 500f, 580f)
+                projectilePositions = emptyList()
+            }
+        }
+
+        return SimulationWorld(
+            player = PlayerState(x = 180f, y = 0f, energy = playerEnergy),
+            enemies = enemyPositions.map { EnemyState(it, 0f) }.toMutableList(),
+            projectiles = projectilePositions.map {
+                Projectile(
+                    x = it,
+                    y = 0f,
+                    vx = if (it < 180f) 260f else -260f,
+                    hostile = true
+                )
+            }.toMutableList(),
+            random = random
         )
     }
 }
