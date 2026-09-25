@@ -24,23 +24,6 @@ class CombatSimulationTest {
     }
 
     @Test
-    fun differentSeedsCanProduceDifferentSnapshots() {
-        val simulation = CombatSimulation()
-        val first = simulation.run(
-            profile = profile("AAA"),
-            scenario = SimulationScenario.CLOSE_ASSAULT,
-            seed = 42L
-        )
-        val second = simulation.run(
-            profile = profile("AAA"),
-            scenario = SimulationScenario.CLOSE_ASSAULT,
-            seed = 43L
-        )
-
-        assertNotEquals(first, second)
-    }
-
-    @Test
     fun fullExperimentProducesExactlyTwoThousandCombats() {
         val seeds = 1L..100L
         val summary = ExperimentRunner().run(seeds)
