@@ -30,10 +30,16 @@ class BraveGameView(context: Context) : View(context) {
         RectF(570f, 0f, 630f, 0f),
         RectF(640f, 0f, 700f, 0f)
     )
+    private data class CorePickup(
+        var x: Float,
+        var y: Float,
+        val core: Core
+    )
+
     private val cores = mutableListOf(
-        Pair(530f, 0f) to Core.A,
-        Pair(600f, 0f) to Core.B,
-        Pair(670f, 0f) to Core.A
+        CorePickup(530f, 0f, Core.A),
+        CorePickup(600f, 0f, Core.B),
+        CorePickup(670f, 0f, Core.A)
     )
 
     init {
@@ -83,7 +89,7 @@ class BraveGameView(context: Context) : View(context) {
             it.top = groundY - 110f
             it.bottom = groundY - 50f
         }
-        cores.forEach { it.first.second = groundY - 145f }
+        cores.forEach { it.y = groundY - 145f }
 
         drawWorld(canvas, groundY)
         drawHud(canvas)
@@ -107,16 +113,16 @@ class BraveGameView(context: Context) : View(context) {
             canvas.drawRoundRect(it, 10f, 10f, paint)
         }
 
-        cores.forEach { (position, core) ->
-            paint.color = if (core == Core.A) {
+        cores.forEach { pickup ->
+            paint.color = if (pickup.core == Core.A) {
                 android.graphics.Color.rgb(255, 170, 45)
             } else {
                 android.graphics.Color.rgb(70, 190, 255)
             }
-            canvas.drawCircle(position.first, position.second, 16f, paint)
+            canvas.drawCircle(pickup.x, pickup.y, 16f, paint)
             paint.color = android.graphics.Color.WHITE
             paint.textSize = 18f
-            canvas.drawText(core.name, position.first - 6f, position.second + 6f, paint)
+            canvas.drawText(pickup.core.name, pickup.x - 6f, pickup.y + 6f, paint)
         }
 
         // Enemies retain the same readable silhouette, but use the game's new
@@ -320,15 +326,17 @@ class BraveGameView(context: Context) : View(context) {
 
     private fun collectNearestCore() {
         if (cores.isEmpty()) return
-        val nearest = cores.minByOrNull { abs(it.first.first - game.player.x) } ?: return
-        if (abs(nearest.first.first - game.player.x) > 120f) {
+        val nearest = cores.minByOrNull { abs(it.x - game.player.x) } ?: return
+        if (abs(nearest.x - game.player.x) > 120f) {
             message = "MOVE CLOSER"
             return
         }
+
+        val collectedCore = nearest.core
         cores.remove(nearest)
-        val result = adaptive.collect(nearest.second)
+        val result = adaptive.collect(collectedCore)
         message = if (result == null) {
-            "CORE " + nearest.second.name + " ACQUIRED"
+            "CORE " + collectedCore.name + " ACQUIRED"
         } else {
             companion = result
             controller.state.x = game.player.x + if (game.player.facing > 0) 72f else -72f
