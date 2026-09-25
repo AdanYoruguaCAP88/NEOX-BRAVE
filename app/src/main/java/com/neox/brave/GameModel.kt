@@ -63,6 +63,14 @@ class GameModel {
         projectiles.removeAll { it.x < -100f || it.x > 3000f }
     }
 
+    fun observe(): Observation = Observation(
+        playerX = player.x,
+        playerEnergy = player.energy,
+        nearestEnemyDistance = nearestEnemy()?.let { abs(it.x - player.x) },
+        hostileProjectileDistance = nearestHostileProjectile()?.let { abs(it.x - player.x) },
+        enemyCount = enemies.count { it.energy > 0f }
+    )
+
     fun nearestEnemy(): EnemyState? =
         enemies
             .filter { it.energy > 0f }
