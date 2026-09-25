@@ -60,15 +60,10 @@ class BraveGameView(context: Context) : View(context) {
             game.player.facing = 1
         }
 
-        val context = CombatContext(
-            game.player.x,
-            game.player.energy,
-            game.nearestEnemy()?.let { abs(it.x - game.player.x) },
-            game.projectiles.filter { it.hostile }.minOfOrNull { abs(it.x - game.player.x) },
-            game.enemies.count { it.energy > 0f }
-        )
+        val observation = game.observe()
+
         companion?.let {
-            companionAction = combat.decide(it, context)
+            companionAction = combat.decide(it, observation.toCombatContext())
             if (controller.state.x == 0f) {
                 controller.state.x = game.player.x + 72f
             }
