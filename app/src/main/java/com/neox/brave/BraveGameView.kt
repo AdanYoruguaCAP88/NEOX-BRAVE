@@ -91,44 +91,181 @@ class BraveGameView(context: Context) : View(context) {
     }
 
     private fun drawWorld(canvas: Canvas, groundY: Float) {
-        canvas.drawColor(android.graphics.Color.rgb(9, 12, 20))
+        canvas.drawColor(android.graphics.Color.rgb(238, 241, 246))
+
+        // Clean 2D arena: the character art is intentionally built from simple
+        // vector shapes so the visual language survives without external assets.
         paint.style = Paint.Style.FILL
-        paint.color = android.graphics.Color.rgb(24, 31, 48)
+        paint.color = android.graphics.Color.rgb(205, 211, 220)
         canvas.drawRect(0f, groundY, width.toFloat(), height.toFloat(), paint)
 
-        paint.color = android.graphics.Color.WHITE
-        canvas.drawRect(game.player.x, game.player.y, game.player.x + 42f, game.player.y + 72f, paint)
+        paint.color = android.graphics.Color.rgb(170, 178, 190)
+        canvas.drawRect(0f, groundY, width.toFloat(), groundY + 3f, paint)
 
-        paint.color = android.graphics.Color.rgb(80, 180, 255)
-        blocks.forEach { canvas.drawRect(it, paint) }
+        blocks.forEach {
+            paint.color = android.graphics.Color.rgb(62, 87, 120)
+            canvas.drawRoundRect(it, 10f, 10f, paint)
+        }
 
         cores.forEach { (position, core) ->
-            paint.color = if (core == Core.A) android.graphics.Color.rgb(255,120,80) else android.graphics.Color.rgb(100,255,180)
+            paint.color = if (core == Core.A) {
+                android.graphics.Color.rgb(255, 170, 45)
+            } else {
+                android.graphics.Color.rgb(70, 190, 255)
+            }
             canvas.drawCircle(position.first, position.second, 16f, paint)
-            paint.color = android.graphics.Color.BLACK
+            paint.color = android.graphics.Color.WHITE
             paint.textSize = 18f
             canvas.drawText(core.name, position.first - 6f, position.second + 6f, paint)
         }
 
+        // Enemies retain the same readable silhouette, but use the game's new
+        // white/navy/gold visual grammar.
         game.enemies.filter { it.energy > 0f }.forEach {
-            paint.color = android.graphics.Color.rgb(220,70,90)
-            canvas.drawRect(it.x, groundY - 92f, it.x + 42f, groundY - 20f, paint)
+            drawEnemy(canvas, it.x, groundY - 18f)
         }
 
-        paint.color = android.graphics.Color.YELLOW
+        paint.color = android.graphics.Color.rgb(255, 170, 45)
         game.projectiles.filter { it.hostile }.forEach {
             canvas.drawCircle(it.x, it.y, 7f, paint)
         }
 
+        // Main fighter: right-facing side profile, armored white/navy/gold.
+        drawBrave(canvas, game.player.x, game.player.y, game.player.facing, 1.0f)
+
         companion?.let {
-            val cx = controller.state.x
-            val cy = controller.state.y
-            paint.color = android.graphics.Color.rgb(210,210,255)
-            canvas.drawCircle(cx, cy, 22f, paint)
-            paint.color = android.graphics.Color.BLACK
-            paint.textSize = 12f
-            canvas.drawText(it.signature, cx - 18f, cy + 4f, paint)
+            drawBrave(
+                canvas,
+                controller.state.x,
+                controller.state.y + 4f,
+                game.player.facing,
+                0.62f
+            )
         }
+    }
+
+    private fun drawBrave(
+        canvas: Canvas,
+        x: Float,
+        feetY: Float,
+        facing: Int,
+        scale: Float
+    ) {
+        canvas.save()
+        canvas.translate(x, feetY)
+        canvas.scale(if (facing >= 0) scale else -scale, scale)
+
+        val white = android.graphics.Color.rgb(245, 247, 250)
+        val navy = android.graphics.Color.rgb(18, 34, 64)
+        val gold = android.graphics.Color.rgb(255, 171, 42)
+        val visor = android.graphics.Color.rgb(238, 133, 43)
+        val dark = android.graphics.Color.rgb(45, 52, 65)
+
+        // Rear leg first: gives the silhouette a clear 90-degree combat stance.
+        paint.color = navy
+        canvas.drawRoundRect(RectF(-20f, -58f, 4f, -4f), 7f, 7f, paint)
+        paint.color = white
+        canvas.drawRoundRect(RectF(-17f, -54f, 1f, -8f), 5f, 5f, paint)
+        paint.color = gold
+        canvas.drawCircle(-8f, -48f, 4f, paint)
+
+        // Forward leg.
+        paint.color = navy
+        canvas.drawRoundRect(RectF(10f, -64f, 34f, -4f), 7f, 7f, paint)
+        paint.color = white
+        canvas.drawRoundRect(RectF(13f, -60f, 31f, -10f), 5f, 5f, paint)
+        paint.color = gold
+        canvas.drawCircle(22f, -48f, 4f, paint)
+
+        // Boots.
+        paint.color = navy
+        canvas.drawRoundRect(RectF(-23f, -10f, 7f, 2f), 6f, 6f, paint)
+        canvas.drawRoundRect(RectF(28f, -10f, 58f, 2f), 6f, 6f, paint)
+        paint.color = white
+        canvas.drawRoundRect(RectF(-18f, -8f, 4f, 0f), 4f, 4f, paint)
+        canvas.drawRoundRect(RectF(33f, -8f, 54f, 0f), 4f, 4f, paint)
+
+        // Torso.
+        paint.color = navy
+        canvas.drawRoundRect(RectF(-22f, -116f, 31f, -56f), 12f, 12f, paint)
+        paint.color = white
+        canvas.drawRoundRect(RectF(-16f, -111f, 25f, -61f), 9f, 9f, paint)
+
+        // Chest solar emblem.
+        paint.color = gold
+        canvas.drawCircle(9f, -91f, 10f, paint)
+        paint.color = white
+        canvas.drawCircle(9f, -91f, 5f, paint)
+
+        // Shoulder armor.
+        paint.color = white
+        canvas.drawOval(RectF(-34f, -113f, -4f, -91f), paint)
+        paint.color = gold
+        canvas.drawCircle(-21f, -102f, 5f, paint)
+
+        // Rear arm and forward punching arm.
+        paint.color = navy
+        canvas.drawRoundRect(RectF(-39f, -99f, -20f, -55f), 8f, 8f, paint)
+        paint.color = white
+        canvas.drawRoundRect(RectF(-35f, -96f, -23f, -60f), 6f, 6f, paint)
+
+        paint.color = navy
+        canvas.drawRoundRect(RectF(20f, -101f, 42f, -67f), 8f, 8f, paint)
+        paint.color = white
+        canvas.drawRoundRect(RectF(23f, -98f, 39f, -70f), 6f, 6f, paint)
+
+        // Raised fist.
+        paint.color = navy
+        canvas.drawRoundRect(RectF(38f, -104f, 55f, -87f), 7f, 7f, paint)
+        paint.color = gold
+        canvas.drawCircle(49f, -101f, 2.5f, paint)
+        canvas.drawCircle(53f, -98f, 2.5f, paint)
+
+        // Neck.
+        paint.color = dark
+        canvas.drawRect(0f, -122f, 14f, -112f, paint)
+
+        // Helmet, strictly side-profile silhouette.
+        paint.color = navy
+        canvas.drawOval(RectF(-17f, -151f, 28f, -113f), paint)
+        paint.color = white
+        canvas.drawOval(RectF(-12f, -147f, 23f, -117f), paint)
+
+        // Side visor only — never a front-facing pair of eyes.
+        paint.color = visor
+        canvas.drawRoundRect(RectF(13f, -141f, 34f, -128f), 5f, 5f, paint)
+
+        // Helmet side disk and gold fins.
+        paint.color = white
+        canvas.drawCircle(-5f, -132f, 9f, paint)
+        paint.color = navy
+        canvas.drawCircle(-5f, -132f, 5f, paint)
+        paint.color = gold
+        val fin = android.graphics.Path()
+        fin.moveTo(-2f, -148f)
+        fin.lineTo(5f, -166f)
+        fin.lineTo(9f, -147f)
+        fin.close()
+        canvas.drawPath(fin, paint)
+
+        // Belt.
+        paint.color = dark
+        canvas.drawRoundRect(RectF(-21f, -64f, 32f, -56f), 3f, 3f, paint)
+        paint.color = gold
+        canvas.drawRect(RectF(3f, -64f, 9f, -56f), paint)
+
+        canvas.restore()
+    }
+
+    private fun drawEnemy(canvas: Canvas, x: Float, feetY: Float) {
+        paint.color = android.graphics.Color.rgb(31, 45, 70)
+        canvas.drawRoundRect(RectF(x, feetY - 62f, x + 40f, feetY), 8f, 8f, paint)
+        paint.color = android.graphics.Color.rgb(210, 219, 230)
+        canvas.drawRoundRect(RectF(x + 7f, feetY - 54f, x + 33f, feetY - 14f), 6f, 6f, paint)
+        paint.color = android.graphics.Color.rgb(225, 95, 65)
+        canvas.drawCircle(x + 29f, feetY - 44f, 4f, paint)
+        paint.color = android.graphics.Color.rgb(255, 171, 42)
+        canvas.drawRect(x + 4f, feetY - 8f, x + 36f, feetY - 4f, paint)
     }
 
     private fun drawHud(canvas: Canvas) {
