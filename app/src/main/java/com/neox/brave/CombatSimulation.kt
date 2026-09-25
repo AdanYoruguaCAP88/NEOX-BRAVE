@@ -129,7 +129,7 @@ class CombatSimulation(
         val controller = CompanionController()
         controller.state.x = world.player.x + 72f
 
-        val actions = CompanionAction.entries.associateWith { 0 }.toMutableMap()
+        val actions = CompanionAction.values().associateWith { 0 }.toMutableMap()
         var elapsed = 0f
 
         while (elapsed < maxDurationSeconds && world.player.energy > 0f) {
