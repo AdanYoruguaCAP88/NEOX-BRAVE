@@ -12,7 +12,7 @@ data class CombatContext(
 
 class AdaptiveCombat {
     fun decide(profile: CompanionProfile, context: CombatContext): CompanionAction {
-        val projectileThreat = context.hostileProjectileDistance?.let { it < 180f } ?: false
+        val projectileThreat = context.hostileProjectileDistance?.let { it < 220f } ?: false
         val enemyThreat = context.nearestEnemyDistance?.let { it < 260f } ?: false
 
         if (projectileThreat && profile.defense + profile.control >= 1.0f) {
