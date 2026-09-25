@@ -1,42 +1,30 @@
-# NEOX-BRAVE — Architecture v0.1
+# NEOX-BRAVE — Architecture v0.3
 
-## Layers
+## Runtime layers
 
 ### Presentation
-Android Activity and custom 2D View.
+Android Activity and custom Canvas renderer.
 
 ### Simulation
-Player, enemies, destructibles, projectiles, stages and collision rules.
+Player, enemies, projectiles, stage geometry and collision state.
+
+### Configuration
+AdaptiveSystem transforms three collected cores into an original capability vector.
 
 ### Decision
-AdaptiveSystem and future behavior policies.
+AdaptiveCombat evaluates capability plus live context and returns an action.
 
-### Content
-Original stage definitions, entity configuration and assets.
+### Execution
+The future CompanionController will translate the action into movement, attacks, interception and positioning.
 
-## Design rule
+## Key invariant
 
-Game simulation must not depend on Android UI widgets.
+**Configuration != behavior.**
 
-This keeps the core portable and makes a future engine migration possible.
+A configuration describes what the companion is capable of doing. The decision layer chooses what it should do based on current system state.
 
-## Adaptive decision model
+This invariant is central to the NEOX-BRAVE adaptive model.
 
-The companion system is intentionally data-driven.
+## Future portability
 
-A future profile can be represented as:
-
-- attack priority
-- defense priority
-- control priority
-- mobility priority
-- threat response
-- objective response
-
-The runtime evaluates the current state and chooses the highest-priority valid action.
-
-## Android strategy
-
-The first prototype uses Kotlin and Canvas to minimize dependencies.
-
-If the project grows beyond the prototype, the simulation layer can be migrated to a dedicated 2D engine while retaining the game-design and adaptive-system contracts.
+The simulation and decision layers intentionally avoid Android UI dependencies. They can later be hosted by another 2D engine or test harness without changing the core adaptive model.
