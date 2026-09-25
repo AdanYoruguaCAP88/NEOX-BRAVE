@@ -37,12 +37,10 @@ data class CombatMetrics(
     var enemiesDefeated: Int = 0,
     var survivalTime: Float = 0f,
     var energyRemaining: Float = 0f,
+    var damageDealt: Float = 0f,
     var actions: MutableMap<CompanionAction, Int> = CompanionAction.values()
         .associateWith { 0 }
         .toMutableMap()
-) {
-    val damageDealt: Float
-        get() = 0f
 }
 
 data class SimulationResult(
@@ -73,7 +71,7 @@ class CombatSimulation(
 
         val steps = (durationSeconds / stepSeconds).toInt()
 
-        repeat(steps) {
+        for (step in 0 until steps) {
             world.time += stepSeconds
             updateEnemies(world, stepSeconds)
             updateProjectiles(world, stepSeconds)
@@ -83,6 +81,7 @@ class CombatSimulation(
             metrics.actions[action] = (metrics.actions[action] ?: 0) + 1
 
             val previousEnemyEnergy = world.enemies.sumOf { it.energy.toDouble() }.toFloat()
+            val previousProjectileCount = world.projectiles.count { it.hostile }
 
             controller.update(
                 dt = stepSeconds,
@@ -103,14 +102,16 @@ class CombatSimulation(
             if (energyDelta > 0f) metrics.damageReceived += energyDelta
             previousEnergy = world.player.energy
 
-            val intercepted = previousEnemyEnergy - currentEnemyEnergy
-            if (action == CompanionAction.INTERCEPT && intercepted >= 0f &&
-                defeatedBefore <= metrics.enemiesDefeated
-            ) {
-                // Interception is counted from projectile removal below.
+            val dealt = previousEnemyEnergy - currentEnemyEnergy
+            if (dealt > 0f) metrics.damageDealt += dealt
+
+            if (action == CompanionAction.INTERCEPT) {
+                val remainingProjectiles = world.projectiles.count { it.hostile }
+                metrics.projectilesIntercepted +=
+                    (previousProjectileCount - remainingProjectiles).coerceAtLeast(0)
             }
 
-            if (world.player.energy <= 0f) return@repeat
+            if (world.player.energy <= 0f) break
         }
 
         metrics.survivalTime = world.time
