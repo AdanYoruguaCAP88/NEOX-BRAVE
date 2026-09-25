@@ -15,6 +15,7 @@ class BraveGameView(context: Context) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val adaptive = AdaptiveSystem()
     private val combat = AdaptiveCombat()
+    private val controller = CompanionController()
     private val game = GameModel()
 
     private var companion: CompanionProfile? = null
@@ -66,7 +67,22 @@ class BraveGameView(context: Context) : View(context) {
             game.projectiles.filter { it.hostile }.minOfOrNull { abs(it.x - game.player.x) },
             game.enemies.count { it.energy > 0f }
         )
-        companion?.let { companionAction = combat.decide(it, context) }
+        companion?.let {
+            companionAction = combat.decide(it, context)
+            if (controller.state.x == 0f) {
+                controller.state.x = game.player.x + 72f
+            }
+            controller.update(
+                dt = dt,
+                groundY = groundY,
+                player = game.player,
+                enemies = game.enemies,
+                projectiles = game.projectiles,
+                profile = it,
+                action = companionAction,
+                worldWidth = width.toFloat()
+            )
+        }
 
         blocks.forEach {
             it.top = groundY - 110f
@@ -110,13 +126,13 @@ class BraveGameView(context: Context) : View(context) {
         }
 
         companion?.let {
-            val cx = game.player.x + if (game.player.facing > 0) 62f else -20f
-            val cy = game.player.y - 30f
+            val cx = controller.state.x
+            val cy = controller.state.y
             paint.color = android.graphics.Color.rgb(210,210,255)
             canvas.drawCircle(cx, cy, 22f, paint)
             paint.color = android.graphics.Color.BLACK
             paint.textSize = 12f
-            canvas.drawText(it.signature, cx - 12f, cy + 4f, paint)
+            canvas.drawText(it.signature, cx - 18f, cy + 4f, paint)
         }
     }
 
@@ -183,6 +199,7 @@ class BraveGameView(context: Context) : View(context) {
             "CORE " + nearest.second.name + " ACQUIRED"
         } else {
             companion = result
+            controller.state.x = game.player.x + if (game.player.facing > 0) 72f else -72f
             "COMPANION " + result.signature + " ONLINE"
         }
     }
