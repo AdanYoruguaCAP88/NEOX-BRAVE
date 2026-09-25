@@ -4,115 +4,181 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
 class BraveGameView(context: Context) : View(context) {
-
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val adaptive = AdaptiveSystem()
+    private val combat = AdaptiveCombat()
+    private val game = GameModel()
 
-    private var playerX = 180f
-    private var playerY = 420f
     private var companion: CompanionProfile? = null
-    private var message = "COLLECT 3 CORES"
+    private var companionAction = CompanionAction.GUARD
+    private var message = "NEOX-BRAVE // SECTOR 01"
+    private var lastFrameNanos = 0L
+    private var leftPressed = false
+    private var rightPressed = false
 
     private val blocks = mutableListOf(
-        RectF(500f, 370f, 560f, 430f),
-        RectF(570f, 370f, 630f, 430f),
-        RectF(640f, 370f, 700f, 430f)
+        RectF(500f, 0f, 560f, 0f),
+        RectF(570f, 0f, 630f, 0f),
+        RectF(640f, 0f, 700f, 0f)
+    )
+    private val cores = mutableListOf(
+        Pair(530f, 0f) to Core.A,
+        Pair(600f, 0f) to Core.B,
+        Pair(670f, 0f) to Core.A
     )
 
-    private val cores = mutableListOf(
-        Pair(530f, 330f) to Core.A,
-        Pair(600f, 330f) to Core.B,
-        Pair(670f, 330f) to Core.A
-    )
+    init {
+        isFocusableInTouchMode = true
+        requestFocus()
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        val now = System.nanoTime()
+        val dt = if (lastFrameNanos == 0L) 0f else min(0.033f, (now - lastFrameNanos) / 1_000_000_000f)
+        lastFrameNanos = now
 
+        val groundY = height * 0.72f
+        game.update(dt, groundY)
+        game.player.y = groundY - 72f
+
+        if (leftPressed) {
+            game.player.x = max(20f, game.player.x - 240f * dt)
+            game.player.facing = -1
+        }
+        if (rightPressed) {
+            game.player.x = min(width - 80f, game.player.x + 240f * dt)
+            game.player.facing = 1
+        }
+
+        val context = CombatContext(
+            game.player.x,
+            game.player.energy,
+            game.nearestEnemy()?.let { abs(it.x - game.player.x) },
+            game.projectiles.filter { it.hostile }.minOfOrNull { abs(it.x - game.player.x) },
+            game.enemies.count { it.energy > 0f }
+        )
+        companion?.let { companionAction = combat.decide(it, context) }
+
+        blocks.forEach {
+            it.top = groundY - 110f
+            it.bottom = groundY - 50f
+        }
+        cores.forEach { it.first.second = groundY - 145f }
+
+        drawWorld(canvas, groundY)
+        drawHud(canvas)
+        postInvalidateOnAnimation()
+    }
+
+    private fun drawWorld(canvas: Canvas, groundY: Float) {
         canvas.drawColor(android.graphics.Color.rgb(9, 12, 20))
-
         paint.style = Paint.Style.FILL
         paint.color = android.graphics.Color.rgb(24, 31, 48)
-        canvas.drawRect(0f, height * 0.72f, width.toFloat(), height.toFloat(), paint)
+        canvas.drawRect(0f, groundY, width.toFloat(), height.toFloat(), paint)
 
         paint.color = android.graphics.Color.WHITE
-        canvas.drawRect(playerX, playerY, playerX + 42f, playerY + 72f, paint)
+        canvas.drawRect(game.player.x, game.player.y, game.player.x + 42f, game.player.y + 72f, paint)
 
         paint.color = android.graphics.Color.rgb(80, 180, 255)
-        for (block in blocks) canvas.drawRect(block, paint)
+        blocks.forEach { canvas.drawRect(it, paint) }
 
-        for ((position, core) in cores) {
-            paint.color = if (core == Core.A) {
-                android.graphics.Color.rgb(255, 120, 80)
-            } else {
-                android.graphics.Color.rgb(100, 255, 180)
-            }
+        cores.forEach { (position, core) ->
+            paint.color = if (core == Core.A) android.graphics.Color.rgb(255,120,80) else android.graphics.Color.rgb(100,255,180)
             canvas.drawCircle(position.first, position.second, 16f, paint)
             paint.color = android.graphics.Color.BLACK
             paint.textSize = 18f
             canvas.drawText(core.name, position.first - 6f, position.second + 6f, paint)
         }
 
-        companion?.let {
-            val cx = playerX + 60f
-            val cy = playerY - 30f
-            paint.color = android.graphics.Color.rgb(210, 210, 255)
-            canvas.drawCircle(cx, cy, 22f, paint)
-            paint.color = android.graphics.Color.BLACK
-            paint.textSize = 14f
-            canvas.drawText(it.signature, cx - 12f, cy + 5f, paint)
+        game.enemies.filter { it.energy > 0f }.forEach {
+            paint.color = android.graphics.Color.rgb(220,70,90)
+            canvas.drawRect(it.x, groundY - 92f, it.x + 42f, groundY - 20f, paint)
         }
 
+        paint.color = android.graphics.Color.YELLOW
+        game.projectiles.filter { it.hostile }.forEach {
+            canvas.drawCircle(it.x, it.y, 7f, paint)
+        }
+
+        companion?.let {
+            val cx = game.player.x + if (game.player.facing > 0) 62f else -20f
+            val cy = game.player.y - 30f
+            paint.color = android.graphics.Color.rgb(210,210,255)
+            canvas.drawCircle(cx, cy, 22f, paint)
+            paint.color = android.graphics.Color.BLACK
+            paint.textSize = 12f
+            canvas.drawText(it.signature, cx - 12f, cy + 4f, paint)
+        }
+    }
+
+    private fun drawHud(canvas: Canvas) {
         paint.color = android.graphics.Color.WHITE
         paint.textSize = 24f
         canvas.drawText(message, 32f, 42f, paint)
-
-        val pending = adaptive.pending().joinToString("")
-        canvas.drawText("CORES: " + pending, 32f, 74f, paint)
-
         paint.textSize = 18f
-        canvas.drawText("TAP LEFT/RIGHT TO MOVE · TAP CENTER TO COLLECT", 32f, height - 28f, paint)
+        canvas.drawText("CORES: " + adaptive.pending().joinToString(""), 32f, 72f, paint)
+        canvas.drawText("ENERGY: " + game.player.energy.toInt(), 32f, 98f, paint)
+        companion?.let {
+            canvas.drawText("COMPANION " + it.signature + " // " + companionAction.name, 32f, 124f, paint)
+        }
+        paint.textSize = 16f
+        canvas.drawText("TOUCH: LEFT/RIGHT MOVE · CENTER COLLECT", 32f, height - 22f, paint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action != MotionEvent.ACTION_DOWN && event.action != MotionEvent.ACTION_MOVE) {
-            return true
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                leftPressed = event.x < width * 0.33f
+                rightPressed = event.x > width * 0.66f
+                if (event.actionMasked == MotionEvent.ACTION_DOWN && event.x in (width * 0.33f)..(width * 0.66f)) {
+                    collectNearestCore()
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                leftPressed = false
+                rightPressed = false
+            }
         }
+        return true
+    }
 
-        val x = event.x
-
-        if (x < width * 0.33f) {
-            playerX = max(20f, playerX - 12f)
-        } else if (x > width * 0.66f) {
-            playerX = min(width - 80f, playerX + 12f)
-        } else {
-            collectNearestCore()
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> leftPressed = true
+            KeyEvent.KEYCODE_DPAD_RIGHT -> rightPressed = true
+            KeyEvent.KEYCODE_BUTTON_A -> collectNearestCore()
+            else -> return super.onKeyDown(keyCode, event)
         }
+        return true
+    }
 
-        invalidate()
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> leftPressed = false
+            KeyEvent.KEYCODE_DPAD_RIGHT -> rightPressed = false
+            else -> return super.onKeyUp(keyCode, event)
+        }
         return true
     }
 
     private fun collectNearestCore() {
         if (cores.isEmpty()) return
-
-        val nearest = cores.minByOrNull {
-            kotlin.math.abs(it.first.first - playerX)
-        } ?: return
-
-        if (kotlin.math.abs(nearest.first.first - playerX) > 120f) {
+        val nearest = cores.minByOrNull { abs(it.first.first - game.player.x) } ?: return
+        if (abs(nearest.first.first - game.player.x) > 120f) {
             message = "MOVE CLOSER"
             return
         }
-
         cores.remove(nearest)
         val result = adaptive.collect(nearest.second)
-
         message = if (result == null) {
             "CORE " + nearest.second.name + " ACQUIRED"
         } else {
