@@ -1,13 +1,15 @@
 package com.neox.brave
 
-enum class Core { A, B }
+enum class Core { A, B, C, D }
 
 data class CompanionProfile(
     val signature: String,
+    val archetype: String,
     val attack: Float,
     val defense: Float,
     val control: Float,
-    val mobility: Float
+    val mobility: Float,
+    val range: Float
 )
 
 class AdaptiveSystem {
@@ -25,15 +27,29 @@ class AdaptiveSystem {
     fun pending(): List<Core> = cores.toList()
 
     private fun profileFor(signature: String): CompanionProfile {
-        val attack = signature.count { it == 'A' }.toFloat()
-        val defense = signature.count { it == 'B' }.toFloat()
+        val vector = signature.map { coreVector(it) }
+        val attack = vector.map { it[0] }.average().toFloat()
+        val defense = vector.map { it[1] }.average().toFloat()
+        val control = vector.map { it[2] }.average().toFloat()
+        val mobility = vector.map { it[3] }.average().toFloat()
+        val range = vector.map { it[4] }.average().toFloat()
 
-        return when {
-            attack == 3f -> CompanionProfile(signature, 1.0f, 0.2f, 0.2f, 0.4f)
-            defense == 3f -> CompanionProfile(signature, 0.25f, 1.0f, 0.35f, 0.35f)
-            signature == "ABA" -> CompanionProfile(signature, 0.7f, 0.4f, 0.9f, 0.5f)
-            signature == "BAB" -> CompanionProfile(signature, 0.45f, 0.85f, 0.75f, 0.6f)
-            else -> CompanionProfile(signature, 0.6f, 0.6f, 0.6f, 0.6f)
+        val archetype = when {
+            attack >= 0.82f && mobility >= 0.65f -> "HUNTER"
+            defense >= 0.82f -> "GUARDIAN"
+            control >= 0.82f -> "TACTICIAN"
+            range >= 0.82f -> "SENTINEL"
+            else -> "HYBRID"
         }
+
+        return CompanionProfile(signature, archetype, attack, defense, control, mobility, range)
+    }
+
+    private fun coreVector(core: Char): FloatArray = when (core) {
+        'A' -> floatArrayOf(1.0f, 0.2f, 0.15f, 0.55f, 0.35f)
+        'B' -> floatArrayOf(0.2f, 1.0f, 0.35f, 0.30f, 0.35f)
+        'C' -> floatArrayOf(0.45f, 0.35f, 1.0f, 0.60f, 0.55f)
+        'D' -> floatArrayOf(0.40f, 0.30f, 0.45f, 1.0f, 0.75f)
+        else -> floatArrayOf(0.5f, 0.5f, 0.5f, 0.5f, 0.5f)
     }
 }
