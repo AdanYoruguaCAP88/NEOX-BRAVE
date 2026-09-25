@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    testImplementation("junit:junit:4.13.2")
 }
 
 android {
